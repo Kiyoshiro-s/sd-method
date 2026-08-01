@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SD法 感性評価システム</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="root"><p class="small-dim" style="padding:24px;">読み込み中...</p></div>
+  <div class="toast" id="toast"></div>
+  <footer class="site-footer">© 2026 Shibata Kiyoshiro</footer>
+
+  <!-- 依存順に読み込み（type=module不使用: file://でもそのまま開けるように） -->
+  <script src="js/utils.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/state.js"></script>
+  <script src="js/chart.js"></script>
+  <script src="js/report.js"></script>
+  <script src="js/survey.js"></script>
+  <script src="js/admin.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
