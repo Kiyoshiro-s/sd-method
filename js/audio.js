@@ -18,7 +18,11 @@
     return dbPromise;
   }
 
-  App.Audio.key = function(projectId, pickId){ return projectId + '::' + pickId; };
+  // audioId が 'legacy' のものは、旧バージョン（1ピック1音源）で保存されたデータ用のキー
+  App.Audio.key = function(projectId, pickId, audioId){
+    if(!audioId || audioId === 'legacy') return projectId + '::' + pickId;
+    return projectId + '::' + pickId + '::' + audioId;
+  };
 
   App.Audio.put = function(key, blob){
     return openDB().then(db => new Promise((resolve, reject) => {

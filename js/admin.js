@@ -257,14 +257,26 @@
           </div>
         </div>`;
       }
-      const audioBlock = p.audioName ? `
+      const audios = p.audios || [];
+      const audioList = audios.map((a, ai) => `
+        <div class="audio-item">
+          <div class="audio-item-head">
+            <span class="audio-item-name">${App.esc(a.name)}</span>
+            <span class="audio-item-actions">
+              <button type="button" class="link-btn" title="上へ" onclick="App.Admin.moveAudio('${p.id}','${a.id}',-1)">↑</button>
+              <button type="button" class="link-btn" title="下へ" onclick="App.Admin.moveAudio('${p.id}','${a.id}',1)">↓</button>
+              <button type="button" class="link-btn" onclick="App.Admin.renameAudio('${p.id}','${a.id}')">名前変更</button>
+              <button type="button" class="link-btn" onclick="App.Admin.removeAudio('${p.id}','${a.id}')">削除</button>
+            </span>
+          </div>
+          <audio controls data-pick="${p.id}" data-audio="${a.id}" style="width:100%;height:32px;"></audio>
+          <div class="small-dim">${App.esc(a.fileName || '')}</div>
+        </div>`).join('');
+      const audioBlock = `
         <div class="audio-block">
-          <audio controls data-pick="${p.id}" style="width:100%;height:32px;"></audio>
-          <div class="small-dim" style="margin-top:4px;">${App.esc(p.audioName)} <button type="button" class="link-btn" onclick="App.Admin.removeAudio('${p.id}')">削除</button></div>
-        </div>` : `
-        <div class="audio-block">
-          <label class="link-btn" style="cursor:pointer;">＋音源を追加
-            <input type="file" accept="audio/*" style="display:none" onchange="App.Admin.handleAudioUpload('${p.id}', this)">
+          ${audioList}
+          <label class="link-btn" style="cursor:pointer;">＋音源を追加（複数選択可）
+            <input type="file" accept="audio/*" multiple style="display:none" onchange="App.Admin.handleAudioUpload('${p.id}', this)">
           </label>
         </div>`;
       return `
@@ -298,7 +310,7 @@
       <div class="admin-topbar">
         <div>
           <div class="eyebrow">ピック設定</div>
-          <p class="subtitle" style="margin-bottom:0;">被験者にはアルファベット表記（A・B・C…）のみが表示されます。実際の材質名は管理者だけが確認できます。並び順（↑↓）が、被験者に提示されるアルファベットの割り当てと、音源の再生順の両方になります。聴取者向けに音源を添付できます。</p>
+          <p class="subtitle" style="margin-bottom:0;">被験者にはアルファベット表記（A・B・C…）のみが表示されます。実際の材質名は管理者だけが確認できます。並び順（↑↓）が、被験者に提示されるアルファベットの割り当てと、音源の再生順の両方になります。各ピックに録音音源を複数添付でき、それぞれに名前を付けられます（評価画面にその名前で表示されます）。</p>
         </div>
       </div>
       ${rows}
@@ -308,27 +320,53 @@
   };
 
   App.Admin.handleAudioUpload = function(pickId, input){
-    const file = input.files[0];
-    if(!file) return;
-    const key = App.Audio.key(App.state.currentProjectId, pickId);
-    App.Audio.put(key, file).then(function(){
-      const p = App.state.picks.find(x => x.id === pickId);
-      if(p) p.audioName = file.name;
+    const files = Array.prototype.slice.call(input.files || []);
+    if(files.length === 0) return;
+    const p = App.state.picks.find(x => x.id === pickId);
+    if(!p) return;
+    if(!p.audios) p.audios = [];
+    const jobs = files.map(file => {
+      const audioId = App.genId('aud');
+      const key = App.Audio.key(App.state.currentProjectId, pickId, audioId);
+      return App.Audio.put(key, file).then(function(){
+        p.audios.push({id:audioId, name:file.name.replace(/\.[^.]+$/, ''), fileName:file.name});
+      });
+    });
+    Promise.all(jobs).then(function(){
       App.storage.set(App.pkey(App.state.currentProjectId,'picks'), App.state.picks);
-      delete App.state.audioUrls[key];
-      App.toast('音源を保存しました');
+      App.toast(files.length + '件の音源を保存しました（名前は「名前変更」から編集できます）');
       App.render();
     }).catch(function(e){
       console.error(e);
       App.toast('音源の保存に失敗しました');
     });
   };
-  App.Admin.removeAudio = function(pickId){
+  App.Admin.renameAudio = function(pickId, audioId){
+    const p = App.state.picks.find(x => x.id === pickId);
+    const a = p && (p.audios || []).find(x => x.id === audioId);
+    if(!a) return;
+    const name = window.prompt('音源の名前を入力してください', a.name);
+    if(name == null || !name.trim()) return;
+    a.name = name.trim();
+    App.storage.set(App.pkey(App.state.currentProjectId,'picks'), App.state.picks);
+    App.render();
+  };
+  App.Admin.moveAudio = function(pickId, audioId, dir){
+    const p = App.state.picks.find(x => x.id === pickId);
+    if(!p || !p.audios) return;
+    const idx = p.audios.findIndex(x => x.id === audioId);
+    const swap = idx + dir;
+    if(idx < 0 || swap < 0 || swap >= p.audios.length) return;
+    [p.audios[idx], p.audios[swap]] = [p.audios[swap], p.audios[idx]];
+    App.storage.set(App.pkey(App.state.currentProjectId,'picks'), App.state.picks);
+    App.render();
+  };
+  App.Admin.removeAudio = function(pickId, audioId){
     if(!window.confirm('この音源を削除しますか？')) return;
-    const key = App.Audio.key(App.state.currentProjectId, pickId);
+    const key = App.Audio.key(App.state.currentProjectId, pickId, audioId);
     App.Audio.delete(key).then(function(){
       const p = App.state.picks.find(x => x.id === pickId);
-      if(p) delete p.audioName;
+      if(p) p.audios = (p.audios || []).filter(x => x.id !== audioId);
       App.storage.set(App.pkey(App.state.currentProjectId,'picks'), App.state.picks);
       delete App.state.audioUrls[key];
       App.toast('削除しました');
@@ -359,6 +397,12 @@
     App.render();
   };
   App.Admin.confirmDeletePick = function(id){
+    const target = App.state.picks.find(x => x.id === id);
+    if(target && target.audios){
+      target.audios.forEach(a => {
+        App.Audio.delete(App.Audio.key(App.state.currentProjectId, id, a.id)).catch(function(){});
+      });
+    }
     App.state.picks = App.state.picks.filter(x => x.id !== id);
     App.storage.set(App.pkey(App.state.currentProjectId,'picks'), App.state.picks);
     App.state.confirmDelete = null;
@@ -461,7 +505,11 @@
         body = `
           <div class="resp-body">
             <table class="score-table"><thead><tr><th>ピック</th><th>評価語</th><th>値</th></tr></thead><tbody>${tableRows}</tbody></table>
-            ${r.freeText ? `<div class="freetext-box">${App.esc(r.freeText)}</div>` : ''}
+            ${Object.keys(r.pickComments || {}).filter(k => (r.pickComments[k] || '').trim()).map(k => {
+              const pi = App.state.picks.findIndex(p => p.id === k);
+              return `<div class="freetext-box"><strong>ピック${pi >= 0 ? App.toPickLabel(pi+1) : '(削除済み)'}：</strong> ${App.esc(r.pickComments[k])}</div>`;
+            }).join('')}
+            ${r.freeText ? `<div class="freetext-box"><strong>全体の自由記述：</strong> ${App.esc(r.freeText)}</div>` : ''}
             <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
               <button class="btn btn-sm btn-primary" onclick="event.stopPropagation();App.Report.openSubjectReport('${r.id}')">レポートを出力（PDF）</button>
               ${App.state.confirmDelete && App.state.confirmDelete.type==='response' && App.state.confirmDelete.id===r.id ? `
@@ -538,7 +586,7 @@
     const series = allSeries.filter(s => App.state.aggregateSelectedPickIds.includes(s.pid));
     const chartsHtml = series.length ? series.map(s => `
       <div class="radar-tile">
-        ${App.Chart.radarSVG({axes, series:[s], min:1, max:App.state.config.scale, size:220})}
+        ${App.Chart.radarSVG({axes:App.Chart.axisWords(), series:[App.Chart.flip(s,App.state.config.scale)], min:1, max:App.state.config.scale, size:220})}
         <div class="radar-tile-label"><span class="legend-swatch" style="background:${s.color}"></span>${App.esc(s.name)} ${App.esc(s.actualName)}</div>
       </div>
     `).join('') : '<div class="empty-note">表示するピックを選択してください。</div>';
@@ -563,6 +611,7 @@
         ${toggles}
       </div>
       <div class="radar-grid">${chartsHtml}</div>
+      <p class="radar-note">外側ほど、軸の評価語に近いことを表します。</p>
       <div style="height:16px"></div>
       <button class="btn btn-primary" onclick="App.Report.openAggregateReport(App.state.aggregateSelectedPickIds)">全体レポートを出力（PDF）</button>
     `;
@@ -598,6 +647,12 @@
         const pickLabel = pIdx >= 0 ? App.toPickLabel(pIdx+1) : '(削除済み)';
         const itemLabel = item ? (item.left + '⇔' + item.right) : '(削除済み)';
         rows.push([r.subjectId, r.role, pickLabel, itemLabel, a.value, App.fmtDate(r.timestamp)]);
+      });
+      Object.keys(r.pickComments || {}).forEach(pid => {
+        const txt = (r.pickComments[pid] || '').trim();
+        if(!txt) return;
+        const pi = App.state.picks.findIndex(p => p.id === pid);
+        rows.push([r.subjectId, r.role, pi >= 0 ? App.toPickLabel(pi+1) : '(削除済み)', 'ピック自由記述', txt, App.fmtDate(r.timestamp)]);
       });
       rows.push([r.subjectId, r.role, '-', '自由記述', r.freeText || '', App.fmtDate(r.timestamp)]);
     });

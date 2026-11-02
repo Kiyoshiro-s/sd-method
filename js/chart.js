@@ -14,7 +14,7 @@
     const max = opts.max;
     const size = opts.size || 380;
     const cx = size / 2, cy = size / 2;
-    const margin = opts.margin || 84;
+    const margin = opts.margin || Math.round(size * 0.26);
     const radius = size / 2 - margin;
     const n = axes.length;
 
@@ -67,8 +67,17 @@
       });
     });
 
-    return '<svg viewBox="0 0 '+size+' '+size+'" width="100%" style="max-width:'+size+'px;display:block;margin:0 auto;">'
+    const pad = 50;
+    return '<svg viewBox="'+(-pad)+' 0 '+(size+pad*2)+' '+size+'" width="100%" style="max-width:'+(size+pad*2)+'px;display:block;margin:0 auto;" role="img">'
       + grid + axisLines + seriesSvg + axisLabels + '</svg>';
+  };
+
+  // 片側の評価語（左の語）を軸にするため、値を反転（外側ほど左の語に近い）
+  App.Chart.flip = function(s, N){
+    return Object.assign({}, s, {values: s.values.map(v => v == null ? null : N + 1 - v)});
+  };
+  App.Chart.axisWords = function(){
+    return App.state.items.map(it => it.left);
   };
 
   App.Chart.legendHTML = function(series){

@@ -36,7 +36,8 @@
     const els = document.querySelectorAll('audio[data-pick]');
     els.forEach(function(el){
       const pickId = el.getAttribute('data-pick');
-      const cacheKey = App.state.currentProjectId + '::' + pickId;
+      const audioId = el.getAttribute('data-audio');
+      const cacheKey = App.Audio.key(App.state.currentProjectId, pickId, audioId);
       if(App.state.audioUrls[cacheKey]){
         if(el.getAttribute('src') !== App.state.audioUrls[cacheKey]) el.src = App.state.audioUrls[cacheKey];
         return;

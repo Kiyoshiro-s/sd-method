@@ -91,6 +91,17 @@
     App.state.config = Object.assign({}, defaultConfig(), savedConfig);
     App.state.items = App.storage.get(App.pkey(id,'items'), []);
     App.state.picks = App.storage.get(App.pkey(id,'picks'), []);
+    // 旧形式（audioName 1つ）→ 新形式（audios 配列：複数音源・名前付き）へ移行
+    let migrated = false;
+    App.state.picks.forEach(p => {
+      if(!p.audios) p.audios = [];
+      if(p.audioName){
+        p.audios.push({id:'legacy', name:p.audioName.replace(/\.[^.]+$/, ''), fileName:p.audioName});
+        delete p.audioName;
+        migrated = true;
+      }
+    });
+    if(migrated) App.storage.set(App.pkey(id,'picks'), App.state.picks);
     App.state.responses = App.storage.get(App.pkey(id,'responses'), []);
   };
 

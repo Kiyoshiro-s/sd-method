@@ -69,5 +69,5 @@ window.App = window.App || {};
   };
 
   // ピック識別用の固定パレット（最大8色分を想定、超える場合は循環）
-  App.COLORS = ['#8FE3E0','#E3B98F','#E38F8F','#9FE38F','#C79FE3','#E3D98F','#8FB3E3','#E38FC7'];
+  App.COLORS = ['#2B5C8F','#B45309','#2F7D57','#7C3AED','#B91C1C','#0E7490','#A16207','#BE185D'];
 })(window.App);

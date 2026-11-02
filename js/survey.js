@@ -26,9 +26,18 @@
       flips,
       answers: {},   // key: `${itemId}__${pickId}` -> value(1..N, 反転前の元の並び基準)
       idx: 0,        // 現在表示中のピック（pickOrderIds のインデックス）
+      pickComments: {},  // ピックごとの自由記述 { pickId: text }
       freeText: '',
       startedAt: new Date().toISOString()
     };
+  };
+
+  App.Survey.setPickComment = function(pickId, value){
+    const s = App.state.session;
+    if(!s) return;
+    if(!s.pickComments) s.pickComments = {};
+    s.pickComments[pickId] = value;
+    App.Survey.debouncedAutosave();
   };
 
   // ---------- ホーム → 説明ページ → 評価開始 ----------
@@ -100,18 +109,18 @@
     return `
       <div class="spectrum"></div>
       <div class="eyebrow">SD法 感性評価システム</div>
-      <h1 class="title">ギターピック<br>感性評価実験</h1>
-      <p class="subtitle">意味微分法（SD法）により、ピックの弾き心地・音色印象を評価します。ピックごとに、すべての評価語をまとめて評価していただきます。</p>
+      <h1 class="title">SD法評価システム</h1>
+      <p class="subtitle">すべての評価語に回答していただきます。</p>
       ${banner}
       <div class="card">
-        <label class="field-label">あなたの立場</label>
+        <label class="field-label">① あなたの立場</label>
         <div class="role-row">
-          <div class="role-opt ${App.state.homeRole==='演奏者'?'selected':''}" onclick="App.state.homeRole='演奏者';App.render()">演奏者</div>
-          <div class="role-opt ${App.state.homeRole==='聴取者'?'selected':''}" onclick="App.state.homeRole='聴取者';App.render()">聴取者</div>
+          <div class="role-opt ${App.state.homeRole==='演奏者'?'selected':''}" role="button" tabindex="0" onclick="App.state.homeRole='演奏者';App.render()">演奏者</div>
+          <div class="role-opt ${App.state.homeRole==='聴取者'?'selected':''}" role="button" tabindex="0" onclick="App.state.homeRole='聴取者';App.render()">聴取者</div>
         </div>
-        <div style="height:18px"></div>
-        <label class="field-label">被験者番号</label>
-        <input type="text" id="subjectIdInput" placeholder="例）001" value="${App.esc(App.state.homeSubjectId)}"
+        <div style="height:24px"></div>
+        <label class="field-label" for="subjectIdInput">② 被験者番号</label>
+        <input type="text" id="subjectIdInput" autocomplete="off" placeholder="例）001" value="${App.esc(App.state.homeSubjectId)}"
           oninput="App.state.homeSubjectId=this.value">
         <div style="height:24px"></div>
         <button class="btn btn-primary btn-block" onclick="App.Survey.goToInstructions()">次へ</button>
@@ -163,9 +172,9 @@
       if(isCurrent) cls.push('current');
       if(isComplete) cls.push('complete');
       else if(isPartial) cls.push('partial');
-      return `<button type="button" class="${cls.join(' ')}" onclick="App.Survey.jumpToPick(${i})">${label}</button>`;
+      return `<button type="button" class="${cls.join(' ')}" aria-label="ピック${label}" onclick="App.Survey.jumpToPick(${i})">${label}</button>`;
     }).join('');
-    return `<div class="pick-nav">${items}</div>`;
+    return `<div class="pick-nav">${items}<span class="pick-nav-legend">緑：完了　橙：一部回答</span></div>`;
   }
 
   App.Survey.jumpToPick = function(idx){
@@ -222,10 +231,7 @@
     const N = App.state.config.scale;
     const pct = Math.round((s.idx / s.pickOrderIds.length) * 100);
 
-    let gridCells = '<div class="pg-empty"></div>';
-    for(let pos = 1; pos <= N; pos++){ gridCells += `<div class="scale-num">${pos}</div>`; }
-    gridCells += '<div class="pg-empty"></div>';
-
+    let gridCells = '';
     s.itemOrderIds.forEach(itemId => {
       const item = App.state.items.find(i => i.id === itemId);
       if(!item) return;
@@ -235,22 +241,27 @@
       const existingValue = s.answers[itemId + '__' + pickId];
       let selectedPos = null;
       if(existingValue != null) selectedPos = flipped ? (N + 1 - existingValue) : existingValue;
-
-      gridCells += `<div class="pg-label left">${App.esc(leftLabel)}</div>`;
+      let cells = '';
       for(let pos = 1; pos <= N; pos++){
-        gridCells += `<div class="cell ${selectedPos===pos?'selected':''}" onclick="App.Survey.selectCell('${itemId}',${pos})">${pos}</div>`;
+        cells += `<button type="button" class="cell ${selectedPos===pos?'selected':''}" aria-pressed="${selectedPos===pos}" aria-label="${App.esc(leftLabel)}と${App.esc(rightLabel)}の間で${pos}" onclick="App.Survey.selectCell('${itemId}',${pos})">${pos}</button>`;
       }
-      gridCells += `<div class="pg-label right">${App.esc(rightLabel)}</div>`;
+      gridCells += `<div class="sd-row"><div class="sd-l">${App.esc(leftLabel)}</div><div class="sd-cells">${cells}</div><div class="sd-r">${App.esc(rightLabel)}</div></div>`;
     });
 
     const anyAnswered = s.itemOrderIds.some(iid => s.answers[iid + '__' + pickId] != null);
     const answeredCount = s.itemOrderIds.filter(iid => s.answers[iid + '__' + pickId] != null).length;
 
-    const audioBlock = pick.audioName ? `
+    const audios = pick.audios || [];
+    const audioBlock = audios.length ? `
       <div class="audio-player-wrap">
         <div class="small-dim" style="margin-bottom:6px;">音源</div>
-        <audio controls data-pick="${pick.id}" style="width:100%;"></audio>
+        ${audios.map(a => `
+          <div class="audio-item">
+            <div class="audio-item-name">${App.esc(a.name)}</div>
+            <audio controls data-pick="${pick.id}" data-audio="${a.id}" style="width:100%;"></audio>
+          </div>`).join('')}
       </div>` : '';
+    const commentValue = (s.pickComments && s.pickComments[pickId]) || '';
 
     return `
       <div class="spectrum"></div>
@@ -262,11 +273,11 @@
       <div class="card">
         <div class="pick-badge">ピック ${pickLabel}</div>
         ${audioBlock}
-        <div class="pickpage-grid-wrap">
-          <div class="pickpage-grid" style="grid-template-columns:minmax(96px,120px) repeat(${N},minmax(30px,1fr)) minmax(96px,120px);">${gridCells}</div>
-        </div>
-        ${answeredCount < s.itemOrderIds.length ? `<p class="small-dim" style="margin-top:14px;">${answeredCount} / ${s.itemOrderIds.length} 評価語 回答済み（未回答のまま次へ進めますが、送信前にすべて回答する必要があります）</p>` : ''}
-        <div class="matrix-actions">
+        <div class="sd-rows">${gridCells}</div>
+        <label class="field-label" style="margin-top:18px;">このピックについての自由記述（任意）</label>
+        <textarea class="pick-comment" rows="2" placeholder="気づいたこと・感想など" oninput="App.Survey.setPickComment('${pickId}', this.value)">${App.esc(commentValue)}</textarea>
+        ${answeredCount < s.itemOrderIds.length ? `<p class="small-dim" style="margin:12px 0 0;">${answeredCount} / ${s.itemOrderIds.length} 評価語 回答済み（未回答のまま次へ進めますが、送信前にすべて回答する必要があります）</p>` : ''}
+        <div class="matrix-actions survey-actions">
           ${s.idx>0 ? `<button class="btn" onclick="App.Survey.goBack()">戻る</button>` : `<span></span>`}
           <button class="btn btn-primary" ${anyAnswered ? '' : 'disabled'} onclick="App.Survey.goNext()">次へ</button>
         </div>
@@ -277,13 +288,16 @@
   // ---------- 自由記述 ----------
   App.Survey.renderFreeText = function(){
     const s = App.state.session;
+    const incomplete = s.pickOrderIds.some(pid => s.itemOrderIds.some(iid => s.answers[iid + '__' + pid] == null));
     return `
       <div class="spectrum"></div>
       <div class="eyebrow">最後に</div>
       <h1 class="title" style="font-size:22px;">自由記述</h1>
       <p class="subtitle">気づいたこと、感想などがあればご記入ください（任意）。</p>
       <div class="card">
-        <textarea id="freeTextInput" placeholder="ここに入力..." oninput="App.state.session.freeText=this.value;App.Survey.debouncedAutosave();">${App.esc(s.freeText)}</textarea>
+        <label class="field-label" for="freeTextInput">全体の感想</label>
+        <textarea id="freeTextInput" rows="5" placeholder="ここに入力..." oninput="App.state.session.freeText=this.value;App.Survey.debouncedAutosave();">${App.esc(s.freeText)}</textarea>
+        ${incomplete ? '<div class="notice-warn">未回答の項目が残っている場合は、送信できません。</div>' : ''}
         <div class="matrix-actions">
           <button class="btn" onclick="App.Survey.backFromFreeText()">戻る</button>
           <button class="btn btn-primary" onclick="App.Survey.submitResponse()">回答を送信する</button>
@@ -333,6 +347,7 @@
       role: s.role,
       timestamp: new Date().toISOString(),
       answers,
+      pickComments: s.pickComments || {},
       freeText: s.freeText
     };
     App.state.responses.push(responseObj);

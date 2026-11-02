@@ -94,7 +94,7 @@
   App.Report.print = function(){ window.print(); };
 
   function buildTable(axes, series, isAggregate){
-    const head = '<tr><th>評価語</th>' + series.map(s => '<th>'+App.esc(s.name)+'</th>').join('') + '</tr>';
+    const head = '<tr><th>評価語（1＝左の語 ／ 最大＝右の語）</th>' + series.map(s => '<th>'+App.esc(s.name)+'</th>').join('') + '</tr>';
     const body = axes.map((axisLabel, i) => {
       const cells = series.map(s => {
         const v = s.values[i];
@@ -132,7 +132,7 @@
     const chartsHtml = filteredSeries.length
       ? filteredSeries.map(s => `
           <div class="radar-tile">
-            ${App.Chart.radarSVG({axes:d.axes, series:[s], min:1, max:d.N, size:230})}
+            ${App.Chart.radarSVG({axes:App.Chart.axisWords(), series:[App.Chart.flip(s,d.N)], min:1, max:d.N, size:230})}
             <div class="radar-tile-label"><span class="legend-swatch" style="background:${s.color}"></span>${App.esc(s.name)} ${App.esc(s.actualName)}</div>
           </div>
         `).join('')
@@ -150,9 +150,16 @@
       '<div class="pick-legend-row"><span class="row-num">'+App.toPickLabel(idx+1)+'</span> '+App.esc(p.actualName)+'</div>'
     ).join('');
 
-    const freeTextBlock = (App.state.reportType === 'subject' && d.response.freeText)
-      ? '<div class="report-section-title">自由記述</div><div class="report-freetext">'+App.esc(d.response.freeText)+'</div>'
-      : '';
+    let freeTextBlock = '';
+    if(App.state.reportType === 'subject'){
+      const pc = d.response.pickComments || {};
+      const pcHtml = App.state.picks.map((p, idx) => {
+        const t = (pc[p.id] || '').trim();
+        return t ? '<div class="report-freetext" style="margin-bottom:8px;"><strong>ピック'+App.toPickLabel(idx+1)+'：</strong> '+App.esc(t)+'</div>' : '';
+      }).join('');
+      if(pcHtml) freeTextBlock += '<div class="report-section-title">ピックごとの自由記述</div>' + pcHtml;
+      if(d.response.freeText) freeTextBlock += '<div class="report-section-title">全体の自由記述</div><div class="report-freetext">'+App.esc(d.response.freeText)+'</div>';
+    }
 
     return `
       <div class="report-toolbar no-print">
@@ -165,6 +172,7 @@
         <div class="report-sub">${sub}</div>
         ${pickToggleBlock}
         <div class="radar-grid report-chart">${chartsHtml}</div>
+        <p class="radar-note">外側ほど、軸の評価語に近いことを表します。</p>
         ${filteredSeries.length ? buildTable(d.axes, filteredSeries, App.state.reportType === 'aggregate') : ''}
         <div class="report-section-title">ピック対応表（管理者用・被験者には非公開の情報です）</div>
         ${pickLegend}
